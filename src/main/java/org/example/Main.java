@@ -11,16 +11,16 @@ public class Main
     private static final double[] TRUE_COEFFICIENTS = new double[]{1, -1, -4, -9, 6.5, 9.5};
 
     private static final RandomDataGenerator RANDOM = new RandomDataGenerator();
-    private static final Parameters STANDARD_GEOMETRIC = new Parameters(10000, 50, 100, new GeometricSelector(0.01), new PointwiseMutator());
-    private static final Parameters STANDARD_TOP = new Parameters(10000, 50, 2000, new TopOfClassSelector(),
-            new PointwiseMutator());
+    private static final Parameters STANDARD_GEOMETRIC = new Parameters(10000, 50, 100, new GeometricSelector(0.01), new PointwiseRandomMutator());
+    private static final Parameters STANDARD_TOP = new Parameters(10000, 50, 500, new TopOfClassSelector(),
+            new PointwiseGaussianMutator());
 
     public static void main(String[] args)
     {
-        geneticAlgorithm(STANDARD_TOP);
+        System.out.println(Arrays.toString(geneticAlgorithm(STANDARD_TOP)));
     }
 
-    private static double geneticAlgorithm(Parameters params)
+    private static double[] geneticAlgorithm(Parameters params)
     {
         Population currentPopulation = Population.generateRandomPopulation(params.populationSize);
 
@@ -49,7 +49,7 @@ public class Main
             System.out.println(currentPopulation.averageFitness());
         }
 
-        return currentPopulation.averageFitness();
+        return currentPopulation.individuals[0].chromosome;
     }
 
     private static double evaluateFitness(double[] coefficients)
@@ -66,7 +66,7 @@ public class Main
     }
 
     /**
-     * <a href="https://www.desmos.com/calculator/tuaumcnl3p">desmos</a>
+     * <a href="https://www.desmos.com/calculator/efxwgzdyyf">desmos</a>
      */
     private static double quinticPolynomial(double x, double[] coefs)
     {
@@ -266,7 +266,24 @@ public class Main
         }
     }
 
-    static class PointwiseMutator implements Mutator
+    static class PointwiseGaussianMutator implements Mutator
+    {
+        @Override
+        public Individual mutate(Individual individual)
+        {
+            if (RANDOM.nextUniform(0, 1) < 0.5)
+            {
+                double[] coefficients = individual.chromosome();
+                int randomCoefficientIndex = RANDOM.nextInt(0, 5);
+                coefficients[randomCoefficientIndex] = RANDOM.nextGaussian(coefficients[randomCoefficientIndex], 1);
+                return new Individual(coefficients);
+            }
+
+            return individual;
+        }
+    }
+
+    static class PointwiseRandomMutator implements Mutator
     {
         @Override
         public Individual mutate(Individual individual)
