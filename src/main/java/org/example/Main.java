@@ -5,6 +5,19 @@ import org.apache.commons.math3.random.RandomDataGenerator;
 
 import java.util.Arrays;
 
+/**
+ * smaller Params.numSelect makes convergence faster and smoother (~1/100). As it gets larger (~1/10) convergence is
+ * slower and more jagged. The benefit of the latter is not getting stuck in local minima, but I'm not sure how much
+ * of an issue that is here.
+ * <p>
+ * larger population size does help, of course makes things much slower. Here 1k -> 10k gives 2x smaller loss. Seeing
+ * not much improvement after 10k. Convergence gets smoother.
+ * <p>
+ * Hard to tell any difference between Geometric selector and top of class. Geometric convergence is a bit jaggeder.
+ * <p>
+ * The biggest impact is the choice of mutation method by far. Moving from a totally random mutation to a gaussian
+ * jiggle gave an immediate 2x improvement.
+ */
 public class Main
 {
     // range -10 to 10
