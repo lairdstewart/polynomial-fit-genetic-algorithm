@@ -11,10 +11,9 @@ public class Main
     private static final double[] TRUE_COEFFICIENTS = new double[]{1, -1, -4, -9, 6.5, 9.5};
 
     private static final RandomDataGenerator RANDOM = new RandomDataGenerator();
-    private static final Parameters STANDARD_GEOMETRIC =
-            new Parameters(10000, 50, 100, new GeometricSelector(0.01), new PointwiseMutator());
-    private static final Parameters STANDARD_TOP =
-            new Parameters(10000, 50, 100, new TopOfClassSelector(), new PointwiseMutator());
+    private static final Parameters STANDARD_GEOMETRIC = new Parameters(10000, 50, 100, new GeometricSelector(0.01), new PointwiseMutator());
+    private static final Parameters STANDARD_TOP = new Parameters(10000, 50, 2000, new TopOfClassSelector(),
+            new PointwiseMutator());
 
     public static void main(String[] args)
     {
@@ -23,7 +22,7 @@ public class Main
 
     private static double geneticAlgorithm(Parameters params)
     {
-        Population currentPopulation = Population.generateRandomPopulation(1000);
+        Population currentPopulation = Population.generateRandomPopulation(params.populationSize);
 
         for (int i = 0; i < params.numIterations; i++)
         {
@@ -45,11 +44,6 @@ public class Main
                 Individual mutatedChild = params.mutator().mutate(child);
                 nextGenerationIndividuals[j] = mutatedChild;
             }
-
-            // todo the algorithm is falling into a local minimum quite quickly. I tried to add mutations, but that only
-            //  made things worse ... need to toy with the parameters. would be worth it to make a parameters object?
-
-            // todo need to weight selection probablity by fitness not just index in order.
 
             currentPopulation = new Population(nextGenerationIndividuals);
             System.out.println(currentPopulation.averageFitness());
