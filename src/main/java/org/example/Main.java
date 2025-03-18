@@ -3,7 +3,12 @@ package org.example;
 import org.apache.commons.math3.distribution.GeometricDistribution;
 import org.apache.commons.math3.random.RandomDataGenerator;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * smaller Params.numSelect makes convergence faster and smoother (~1/100). As it gets larger (~1/10) convergence is
@@ -40,8 +45,30 @@ public class Main
 
     public static void main(String[] args)
     {
-        System.out.println(Arrays.toString(geneticAlgorithm(TOP_NO_MUTATION)));
+        List<double[]> chromosomeHistory = geneticAlgorithm(TOP_NO_MUTATION);
+        saveToDat(chromosomeHistory);
         System.out.println("total polynomial evaluations: " + NUM_FITNESS_EVALUATIONS);
+    }
+
+    private static void saveToDat(List<double[]> arrays)
+    {
+        String fileName = "chromosome-history.dat";
+
+        try (FileWriter fileWriter = new FileWriter(fileName);
+             BufferedWriter bufferedWriter = new BufferedWriter(fileWriter))
+        {
+            for (double[] array : arrays)
+            {
+                for (int i = 0; i < array.length; i++)
+                {
+                    bufferedWriter.write(array[i] + ",");
+                }
+                bufferedWriter.newLine();
+            }
+        } catch (IOException e)
+        {
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -49,12 +76,17 @@ public class Main
      * 2. create 80 children and keep 20 parents for the next generation
      * 3. create 500 children, down-select to 100
      */
-    private static double[] geneticAlgorithm(Parameters params)
+    private static List<double[]> geneticAlgorithm(Parameters params)
     {
+        List<double[]> chromosomeHistory = new ArrayList<>();
+
         Population currentPopulation = Population.generateRandomPopulation(params.populationSize);
 
         for (int i = 0; i < params.numIterations; i++)
         {
+            chromosomeHistory.add(currentPopulation.individuals[0].chromosome);
+            System.out.println(currentPopulation.averageFitness());
+
             Individual[] selectedIndividuals = params.selector().select(currentPopulation);
             Individual[] nextGenerationIndividuals = new Individual[params.populationSize];
 
@@ -74,11 +106,17 @@ public class Main
                 nextGenerationIndividuals[j] = mutatedChild;
             }
 
-            currentPopulation = new Population(nextGenerationIndividuals);
-            System.out.println(currentPopulation.averageFitness());
+            Population nextPopulation = new Population(nextGenerationIndividuals);
+
+            if (currentPopulation.averageFitness() == nextPopulation.averageFitness())
+            {
+                break;
+            }
+
+            currentPopulation = nextPopulation;
         }
 
-        return currentPopulation.individuals[0].chromosome;
+        return chromosomeHistory;
     }
 
     private static double evaluateFitness(double[] coefficients)
