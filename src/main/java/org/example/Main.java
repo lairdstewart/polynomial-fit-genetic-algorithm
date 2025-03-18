@@ -24,13 +24,14 @@ public class Main
     private static final double[] TRUE_COEFFICIENTS = new double[]{1, -1, -4, -9, 6.5, 9.5};
 
     private static final RandomDataGenerator RANDOM = new RandomDataGenerator();
-    private static final Parameters STANDARD_GEOMETRIC = new Parameters(10000, 50, 100, new GeometricSelector(0.01), new PointwiseRandomMutator());
-    private static final Parameters STANDARD_TOP = new Parameters(10000, 50, 500, new TopOfClassSelector(),
-            new PointwiseGaussianMutator());
+    private static final Parameters GEOMETRIC_POINTWISE = new Parameters(10000, 50, 1000, new GeometricSelector(0.01), new PointwiseRandomMutator()); // 80
+    private static final Parameters TOP_GAUSSIAN_MID_SIGMA = new Parameters(10000, 50, 1000, new TopOfClassSelector(), new PointwiseGaussianMutator(1)); // 8
+    private static final Parameters TOP_GAUSSIAN_SMALL_SIGMA = new Parameters(10000, 50, 1000, new TopOfClassSelector(), new PointwiseGaussianMutator(0.1)); // 1
+    private static final Parameters TOP_NO_MUTATION = new Parameters(10000, 50, 1000, new TopOfClassSelector(), new NullMutator()); // 1
 
     public static void main(String[] args)
     {
-        System.out.println(Arrays.toString(geneticAlgorithm(STANDARD_TOP)));
+        System.out.println(Arrays.toString(geneticAlgorithm(TOP_NO_MUTATION)));
     }
 
     private static double[] geneticAlgorithm(Parameters params)
@@ -86,6 +87,11 @@ public class Main
         return coefs[0] + coefs[1] * x + coefs[2] * Math.pow(x, 2) + coefs[3] * Math.pow(x, 3) + coefs[4] * Math.pow(x, 4) + coefs[5] * Math.pow(x, 5);
     }
 
+    interface Breeder
+    {
+        Individual breed(Individual first, Individual second);
+    }
+
     interface Mutator
     {
         Individual mutate(Individual individual);
@@ -106,11 +112,13 @@ public class Main
      * @param populationSize
      * @param numSelect      number of individuals selected to reproduce
      */
-    private record Parameters(int populationSize, int numIterations, int numSelect, Selector selector, Mutator mutator)
+    private record Parameters(int populationSize, int numIterations,
+                              int numSelect, Selector selector, Mutator mutator)
     {
     }
 
-    record Individual(double[] chromosome, double fitness) implements Comparable<Individual>
+    record Individual(double[] chromosome,
+                      double fitness) implements Comparable<Individual>
     {
 
         Individual(double[] chromosome)
@@ -279,8 +287,24 @@ public class Main
         }
     }
 
+    static class NullMutator implements Mutator
+    {
+        @Override
+        public Individual mutate(Individual individual)
+        {
+            return individual;
+        }
+    }
+
     static class PointwiseGaussianMutator implements Mutator
     {
+        private final double sigma;
+
+        PointwiseGaussianMutator(double sigma)
+        {
+            this.sigma = sigma;
+        }
+
         @Override
         public Individual mutate(Individual individual)
         {
@@ -288,7 +312,7 @@ public class Main
             {
                 double[] coefficients = individual.chromosome();
                 int randomCoefficientIndex = RANDOM.nextInt(0, 5);
-                coefficients[randomCoefficientIndex] = RANDOM.nextGaussian(coefficients[randomCoefficientIndex], 1);
+                coefficients[randomCoefficientIndex] = RANDOM.nextGaussian(coefficients[randomCoefficientIndex], sigma);
                 return new Individual(coefficients);
             }
 
