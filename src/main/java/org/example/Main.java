@@ -24,14 +24,16 @@ public class Main
     private static final double[] TRUE_COEFFICIENTS = new double[]{1, -1, -4, -9, 6.5, 9.5};
 
     private static final RandomDataGenerator RANDOM = new RandomDataGenerator();
-    private static final Parameters GEOMETRIC_POINTWISE = new Parameters(10000, 50, 1000, new GeometricSelector(0.01),
-            new PointwiseRandomMutator(), new PointwiseBreeder()); // 80
-    private static final Parameters TOP_GAUSSIAN_MID_SIGMA = new Parameters(10000, 50, 1000, new TopOfClassSelector(),
+    private static final Parameters GEOMETRIC_POINTWISE = new Parameters(10000, 50, new GeometricSelector(0.01,
+            0.1), new PointwiseRandomMutator(), new PointwiseBreeder()); // 80
+    private static final Parameters TOP_GAUSSIAN_MID_SIGMA = new Parameters(10000, 50, new TopOfClassSelector(0.1),
             new PointwiseGaussianMutator(1), new PointwiseBreeder()); // 8
-    private static final Parameters TOP_GAUSSIAN_SMALL_SIGMA = new Parameters(10000, 50, 1000,
-            new TopOfClassSelector(), new PointwiseGaussianMutator(0.1), new PointwiseBreeder()); // 1
-    private static final Parameters TOP_NO_MUTATION = new Parameters(10000, 50, 1000, new TopOfClassSelector(),
+    private static final Parameters TOP_GAUSSIAN_SMALL_SIGMA = new Parameters(10000, 50,
+            new TopOfClassSelector(0.1), new PointwiseGaussianMutator(0.1), new PointwiseBreeder()); // 1
+    private static final Parameters TOP_NO_MUTATION = new Parameters(10000, 50, new TopOfClassSelector(0.1),
             new NullMutator(), new PointwiseBreeder()); // 1
+    private static final Parameters DO_NOTHING = new Parameters(10000, 50, new TopOfClassSelector(0.1),
+            new NullMutator(), new NullBreeder());
 
     public static void main(String[] args)
     {
@@ -44,16 +46,16 @@ public class Main
 
         for (int i = 0; i < params.numIterations; i++)
         {
-            Individual[] selectedIndividuals = params.selector().select(params.numSelect, currentPopulation);
+            Individual[] selectedIndividuals = params.selector().select(currentPopulation);
             Individual[] nextGenerationIndividuals = new Individual[params.populationSize];
 
             for (int j = 0; j < params.populationSize; j++)
             {
-                int firstIndex = RANDOM.nextInt(0, params.numSelect - 1);
+                int firstIndex = RANDOM.nextInt(0, selectedIndividuals.length - 1);
                 int secondIndex;
                 do
                 {
-                    secondIndex = RANDOM.nextInt(0, params.numSelect - 1);
+                    secondIndex = RANDOM.nextInt(0, selectedIndividuals.length - 1);
                 } while (secondIndex == firstIndex);
 
                 Individual selectedIndividual1 = selectedIndividuals[firstIndex];
@@ -123,22 +125,16 @@ public class Main
         Individual mutate(Individual individual);
     }
 
-    // todo could return boolean mask for performance
+    /**
+     * Select a subset of the population. Assume population is sorted by fitness.
+     * todo could return boolean mask for performance
+     */
     interface Selector
     {
-        /**
-         * @param count      number of individuals to select
-         * @param population population to select from
-         * @return count unique selected individuals
-         */
-        Individual[] select(int count, Population population);
+        Individual[] select(Population population);
     }
 
-    /**
-     * @param populationSize
-     * @param numSelect      number of individuals selected to reproduce
-     */
-    private record Parameters(int populationSize, int numIterations, int numSelect, Selector selector, Mutator mutator,
+    private record Parameters(int populationSize, int numIterations, Selector selector, Mutator mutator,
                               Breeder breeder)
     {
     }
@@ -202,7 +198,7 @@ public class Main
     {
         // todo
         @Override
-        public Individual[] select(int count, Population population)
+        public Individual[] select(Population population)
         {
             return new Individual[0];
         }
@@ -210,10 +206,19 @@ public class Main
 
     static class TopOfClassSelector implements Selector
     {
-        @Override
-        public Individual[] select(int count, Population population)
+        final double pctToSelect;
+
+        TopOfClassSelector(double pctToSelect)
         {
-            return Arrays.copyOfRange(population.individuals, 0, count);
+            this.pctToSelect = pctToSelect;
+        }
+
+        @Override
+        public Individual[] select(Population population)
+        {
+            int numToSelect = (int) (population.size * pctToSelect);
+
+            return Arrays.copyOfRange(population.individuals, 0, numToSelect);
         }
 
     }
@@ -221,20 +226,24 @@ public class Main
     static class GeometricSelector implements Selector
     {
         private final GeometricDistribution geometricDistribution;
+        private final double pctToSelect;
 
-        GeometricSelector(double p)
+        GeometricSelector(double p, double pctToSelect)
         {
             geometricDistribution = new GeometricDistribution(p);
+            this.pctToSelect = pctToSelect;
         }
 
         @Override
-        public Individual[] select(int count, Population population)
+        public Individual[] select(Population population)
         {
+            int numToSelect = (int) (population.size * pctToSelect);
+
             boolean[] selectedIndices = new boolean[population.size];
-            Individual[] selectedIndividuals = new Individual[count];
+            Individual[] selectedIndividuals = new Individual[numToSelect];
 
             int numSelected = 0;
-            while (numSelected < count)
+            while (numSelected < numToSelect)
             {
                 int sampleIndex = sample(population.size);
 
@@ -362,7 +371,7 @@ public class Main
         }
     }
 
-    class NullBreeder implements Breeder
+    static class NullBreeder implements Breeder
     {
         @Override
         public Individual breed(Individual first, Individual second)
