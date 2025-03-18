@@ -20,6 +20,9 @@ import java.util.Arrays;
  */
 public class Main
 {
+    private static int NUM_FITNESS_EVALUATIONS = 0;
+
+    // todo curious to try and see what optimal setup there is when we only have 1000 sample size
     // range -10 to 10
     private static final double[] TRUE_COEFFICIENTS = new double[]{1, -1, -4, -9, 6.5, 9.5};
 
@@ -38,8 +41,14 @@ public class Main
     public static void main(String[] args)
     {
         System.out.println(Arrays.toString(geneticAlgorithm(TOP_NO_MUTATION)));
+        System.out.println("total polynomial evaluations: " + NUM_FITNESS_EVALUATIONS);
     }
 
+    /**
+     * 1. kill off all parents and only keep children for the next generation
+     * 2. create 80 children and keep 20 parents for the next generation
+     * 3. create 500 children, down-select to 100
+     */
     private static double[] geneticAlgorithm(Parameters params)
     {
         Population currentPopulation = Population.generateRandomPopulation(params.populationSize);
@@ -74,15 +83,17 @@ public class Main
 
     private static double evaluateFitness(double[] coefficients)
     {
+        NUM_FITNESS_EVALUATIONS++;
+
         double sum = 0;
         for (double x = -2; x <= 2; x += (double) 4 / 20)
         {
             double trueValue = quinticPolynomial(x, TRUE_COEFFICIENTS);
             double individualsValue = quinticPolynomial(x, coefficients);
-            sum += Math.pow(trueValue - individualsValue, 2);
+            sum += Math.pow(trueValue - individualsValue, 4); // better than quadraditc
         }
 
-        return Math.pow(sum, 0.5);
+        return Math.pow(sum, 0.25);
     }
 
     /**
@@ -93,9 +104,28 @@ public class Main
         return coefs[0] + coefs[1] * x + coefs[2] * Math.pow(x, 2) + coefs[3] * Math.pow(x, 3) + coefs[4] * Math.pow(x, 4) + coefs[5] * Math.pow(x, 5);
     }
 
-    interface Breeder
+    static class SinglePointCrossover implements Breeder
     {
-        Individual breed(Individual first, Individual second);
+        @Override
+        public Individual breed(Individual first, Individual second)
+        {
+            double[] childCoefficients = new double[6];
+
+            int crossoverIndex = RANDOM.nextInt(0, 5);
+
+            for (int i = 0; i < 6; i++)
+            {
+                if (i < crossoverIndex)
+                {
+                    childCoefficients[i] = first.chromosome[i];
+                } else
+                {
+                    childCoefficients[i] = second.chromosome[i];
+                }
+            }
+
+            return new Individual(childCoefficients);
+        }
     }
 
     static class PointwiseBreeder implements Breeder
@@ -120,15 +150,16 @@ public class Main
         }
     }
 
+    interface Breeder
+    {
+        Individual breed(Individual first, Individual second);
+    }
+
     interface Mutator
     {
         Individual mutate(Individual individual);
     }
 
-    /**
-     * Select a subset of the population. Assume population is sorted by fitness.
-     * todo could return boolean mask for performance
-     */
     interface Selector
     {
         Individual[] select(Population population);
@@ -158,24 +189,6 @@ public class Main
             double[] genome = new double[]{a, b, c, d, e, f};
 
             return new Individual(genome);
-        }
-
-        Individual breed(Individual other)
-        {
-            double[] childCoefficients = new double[6];
-
-            for (int i = 0; i < childCoefficients.length; i++)
-            {
-                if (Math.random() > 0.5)
-                {
-                    childCoefficients[i] = chromosome[i];
-                } else
-                {
-                    childCoefficients[i] = other.chromosome[i];
-                }
-            }
-
-            return new Individual(childCoefficients);
         }
 
         @Override
