@@ -7,15 +7,18 @@ import java.util.Arrays;
 
 public class Main
 {
+    // range -10 to 10
     private static final double[] TRUE_COEFFICIENTS = new double[]{1, -1, -4, -9, 6.5, 9.5};
+
     private static final RandomDataGenerator RANDOM = new RandomDataGenerator();
-    private static final Parameters STANDARD_GEOMETRIC = new Parameters(1000, 50, 100, new GeometricSelector(0.01));
-    private static final Parameters STANDARD_TOP = new Parameters(1000, 50, 100, new TopOfClassSelector());
+    private static final Parameters STANDARD_GEOMETRIC =
+            new Parameters(10000, 50, 100, new GeometricSelector(0.01), new PointwiseMutator());
+    private static final Parameters STANDARD_TOP =
+            new Parameters(10000, 50, 100, new TopOfClassSelector(), new PointwiseMutator());
 
     public static void main(String[] args)
     {
-        double avgFitnessGeometric = geneticAlgorithm(STANDARD_GEOMETRIC);
-//        double avgFitnessTop = geneticAlgorithm(STANDARD_TOP);
+        geneticAlgorithm(STANDARD_TOP);
     }
 
     private static double geneticAlgorithm(Parameters params)
@@ -39,7 +42,7 @@ public class Main
                 Individual selectedIndividual1 = selectedIndividuals[firstIndex];
                 Individual selectedIndividual2 = selectedIndividuals[secondIndex];
                 Individual child = selectedIndividual1.breed(selectedIndividual2);
-                Individual mutatedChild = child.mutate();
+                Individual mutatedChild = params.mutator().mutate(child);
                 nextGenerationIndividuals[j] = mutatedChild;
             }
 
@@ -96,7 +99,7 @@ public class Main
      * @param populationSize
      * @param numSelect      number of individuals selected to reproduce
      */
-    private record Parameters(int populationSize, int numIterations, int numSelect, Selector selector)
+    private record Parameters(int populationSize, int numIterations, int numSelect, Selector selector, Mutator mutator)
     {
     }
 
@@ -152,25 +155,6 @@ public class Main
             if (compare < 0) return -1;
             else if (compare > 0) return 1;
             else return 0;
-        }
-
-        Individual mutate()
-        {
-            double[] coefficients = new double[6];
-
-            if (Math.random() > 0.3)
-            {
-                for (int i = 0; i < coefficients.length; i++)
-                {
-                    if (Math.random() > 0.3)
-                    {
-                        coefficients[i] = RANDOM.nextGaussian(chromosome[i], 5);
-                        coefficients[i] = Math.random() * 20 - 10;
-                    }
-                }
-            }
-
-            return new Individual(coefficients);
         }
     }
 
@@ -285,6 +269,23 @@ public class Main
                 sum += individual.fitness;
             }
             return sum / individuals.length;
+        }
+    }
+
+    static class PointwiseMutator implements Mutator
+    {
+        @Override
+        public Individual mutate(Individual individual)
+        {
+            if (RANDOM.nextUniform(0, 1) < 0.5)
+            {
+                double[] coefficients = individual.chromosome();
+                int randomCoefficientIndex = RANDOM.nextInt(0, 5);
+                coefficients[randomCoefficientIndex] = RANDOM.nextUniform(-10, 10);
+                return new Individual(coefficients);
+            }
+
+            return individual;
         }
     }
 }
