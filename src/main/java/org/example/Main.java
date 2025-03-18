@@ -24,10 +24,14 @@ public class Main
     private static final double[] TRUE_COEFFICIENTS = new double[]{1, -1, -4, -9, 6.5, 9.5};
 
     private static final RandomDataGenerator RANDOM = new RandomDataGenerator();
-    private static final Parameters GEOMETRIC_POINTWISE = new Parameters(10000, 50, 1000, new GeometricSelector(0.01), new PointwiseRandomMutator()); // 80
-    private static final Parameters TOP_GAUSSIAN_MID_SIGMA = new Parameters(10000, 50, 1000, new TopOfClassSelector(), new PointwiseGaussianMutator(1)); // 8
-    private static final Parameters TOP_GAUSSIAN_SMALL_SIGMA = new Parameters(10000, 50, 1000, new TopOfClassSelector(), new PointwiseGaussianMutator(0.1)); // 1
-    private static final Parameters TOP_NO_MUTATION = new Parameters(10000, 50, 1000, new TopOfClassSelector(), new NullMutator()); // 1
+    private static final Parameters GEOMETRIC_POINTWISE = new Parameters(10000, 50, 1000, new GeometricSelector(0.01),
+            new PointwiseRandomMutator(), new PointwiseBreeder()); // 80
+    private static final Parameters TOP_GAUSSIAN_MID_SIGMA = new Parameters(10000, 50, 1000, new TopOfClassSelector(),
+            new PointwiseGaussianMutator(1), new PointwiseBreeder()); // 8
+    private static final Parameters TOP_GAUSSIAN_SMALL_SIGMA = new Parameters(10000, 50, 1000,
+            new TopOfClassSelector(), new PointwiseGaussianMutator(0.1), new PointwiseBreeder()); // 1
+    private static final Parameters TOP_NO_MUTATION = new Parameters(10000, 50, 1000, new TopOfClassSelector(),
+            new NullMutator(), new PointwiseBreeder()); // 1
 
     public static void main(String[] args)
     {
@@ -54,7 +58,7 @@ public class Main
 
                 Individual selectedIndividual1 = selectedIndividuals[firstIndex];
                 Individual selectedIndividual2 = selectedIndividuals[secondIndex];
-                Individual child = selectedIndividual1.breed(selectedIndividual2);
+                Individual child = params.breeder.breed(selectedIndividual1, selectedIndividual2);
                 Individual mutatedChild = params.mutator().mutate(child);
                 nextGenerationIndividuals[j] = mutatedChild;
             }
@@ -92,6 +96,28 @@ public class Main
         Individual breed(Individual first, Individual second);
     }
 
+    static class PointwiseBreeder implements Breeder
+    {
+        @Override
+        public Individual breed(Individual first, Individual second)
+        {
+            double[] childCoefficients = new double[6];
+
+            for (int i = 0; i < childCoefficients.length; i++)
+            {
+                if (RANDOM.nextUniform(0, 1) > 0.5)
+                {
+                    childCoefficients[i] = first.chromosome[i];
+                } else
+                {
+                    childCoefficients[i] = second.chromosome[i];
+                }
+            }
+
+            return new Individual(childCoefficients);
+        }
+    }
+
     interface Mutator
     {
         Individual mutate(Individual individual);
@@ -112,13 +138,12 @@ public class Main
      * @param populationSize
      * @param numSelect      number of individuals selected to reproduce
      */
-    private record Parameters(int populationSize, int numIterations,
-                              int numSelect, Selector selector, Mutator mutator)
+    private record Parameters(int populationSize, int numIterations, int numSelect, Selector selector, Mutator mutator,
+                              Breeder breeder)
     {
     }
 
-    record Individual(double[] chromosome,
-                      double fitness) implements Comparable<Individual>
+    record Individual(double[] chromosome, double fitness) implements Comparable<Individual>
     {
 
         Individual(double[] chromosome)
@@ -334,6 +359,15 @@ public class Main
             }
 
             return individual;
+        }
+    }
+
+    class NullBreeder implements Breeder
+    {
+        @Override
+        public Individual breed(Individual first, Individual second)
+        {
+            return first;
         }
     }
 }
