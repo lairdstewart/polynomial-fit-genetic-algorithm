@@ -45,7 +45,7 @@ public class Main
 
     public static void main(String[] args)
     {
-        List<double[]> chromosomeHistory = geneticAlgorithm(TOP_NO_MUTATION);
+        List<double[]> chromosomeHistory = geneticAlgorithm(TOP_GAUSSIAN_SMALL_SIGMA);
         saveToDat(chromosomeHistory);
         System.out.println("total polynomial evaluations: " + NUM_FITNESS_EVALUATIONS);
     }
@@ -103,8 +103,8 @@ public class Main
 
                 Individual selectedIndividual1 = selectedIndividuals[firstIndex];
                 Individual selectedIndividual2 = selectedIndividuals[secondIndex];
-                Individual child = params.breeder.breed(selectedIndividual1, selectedIndividual2);
-                Individual mutatedChild = params.mutator().mutate(child);
+                double[] childChromosome = params.breeder.breed(selectedIndividual1, selectedIndividual2);
+                Individual mutatedChild = params.mutator().mutate(childChromosome);
                 nextGenerationIndividuals[j] = mutatedChild;
             }
 
@@ -147,7 +147,7 @@ public class Main
     static class SinglePointCrossover implements Breeder
     {
         @Override
-        public Individual breed(Individual first, Individual second)
+        public double[] breed(Individual first, Individual second)
         {
             double[] childCoefficients = new double[6];
 
@@ -164,14 +164,14 @@ public class Main
                 }
             }
 
-            return new Individual(childCoefficients);
+            return childCoefficients;
         }
     }
 
     static class PointwiseBreeder implements Breeder
     {
         @Override
-        public Individual breed(Individual first, Individual second)
+        public double[] breed(Individual first, Individual second)
         {
             double[] childCoefficients = new double[6];
 
@@ -186,18 +186,18 @@ public class Main
                 }
             }
 
-            return new Individual(childCoefficients);
+            return childCoefficients;
         }
     }
 
     interface Breeder
     {
-        Individual breed(Individual first, Individual second);
+        double[] breed(Individual first, Individual second);
     }
 
     interface Mutator
     {
-        Individual mutate(Individual individual);
+        Individual mutate(double[] individual);
     }
 
     interface Selector
@@ -377,9 +377,9 @@ public class Main
     static class NullMutator implements Mutator
     {
         @Override
-        public Individual mutate(Individual individual)
+        public Individual mutate(double[] chromosome)
         {
-            return individual;
+            return new Individual(chromosome);
         }
     }
 
@@ -393,43 +393,43 @@ public class Main
         }
 
         @Override
-        public Individual mutate(Individual individual)
+        public Individual mutate(double[] chromosome)
         {
             if (RANDOM.nextUniform(0, 1) < 0.5)
             {
-                double[] coefficients = individual.chromosome();
+                double[] mutantChromosome = new double[chromosome.length];
                 int randomCoefficientIndex = RANDOM.nextInt(0, 5);
-                coefficients[randomCoefficientIndex] = RANDOM.nextGaussian(coefficients[randomCoefficientIndex], sigma);
-                return new Individual(coefficients);
+                mutantChromosome[randomCoefficientIndex] = RANDOM.nextGaussian(chromosome[randomCoefficientIndex], sigma);
+                return new Individual(mutantChromosome);
             }
 
-            return individual;
+            return new Individual(chromosome);
         }
     }
 
     static class PointwiseRandomMutator implements Mutator
     {
         @Override
-        public Individual mutate(Individual individual)
+        public Individual mutate(double[] chromosome)
         {
             if (RANDOM.nextUniform(0, 1) < 0.5)
             {
-                double[] coefficients = individual.chromosome();
+                double[] mutantChromosome = new double[chromosome.length];
                 int randomCoefficientIndex = RANDOM.nextInt(0, 5);
-                coefficients[randomCoefficientIndex] = RANDOM.nextUniform(-10, 10);
-                return new Individual(coefficients);
+                mutantChromosome[randomCoefficientIndex] = RANDOM.nextUniform(-10, 10);
+                return new Individual(mutantChromosome);
             }
 
-            return individual;
+            return new Individual(chromosome);
         }
     }
 
     static class NullBreeder implements Breeder
     {
         @Override
-        public Individual breed(Individual first, Individual second)
+        public double[] breed(Individual first, Individual second)
         {
-            return first;
+            return first.chromosome;
         }
     }
 }
