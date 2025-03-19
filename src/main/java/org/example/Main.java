@@ -59,10 +59,12 @@ public class Main
         {
             for (double[] array : arrays)
             {
-                for (int i = 0; i < array.length; i++)
+                for (int i = 0; i < array.length - 1; i++)
                 {
                     bufferedWriter.write(array[i] + ",");
                 }
+
+                bufferedWriter.write(array[array.length - 1] + "");
                 bufferedWriter.newLine();
             }
         } catch (IOException e)
