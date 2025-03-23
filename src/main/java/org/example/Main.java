@@ -6,10 +6,8 @@ import org.apache.commons.math3.random.RandomDataGenerator;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.List;
 import java.util.stream.IntStream;
 
 /**
@@ -33,33 +31,32 @@ public class Main
     private static final RandomDataGenerator RANDOM = new RandomDataGenerator();
     private static final Parameters GEOMETRIC_POINTWISE = new Parameters(10000, 50, new GeometricSelector(0.01, 0.1), new PointwiseRandomMutator(), new PointwiseBreeder(), new RSSFitnessEvaluator()); // 80
     private static final Parameters TOP_GAUSSIAN_MID_SIGMA = new Parameters(10000, 50, new TopOfClassSelector(0.1), new PointwiseGaussianMutator(1), new PointwiseBreeder(), new RSSFitnessEvaluator()); // 8
-    private static final Parameters TOP_GAUSSIAN_SMALL_SIGMA = new Parameters(1000, 50, new TopOfClassSelector(0.1),
-            new PointwiseGaussianMutator(0.1), new PointwiseBreeder(), new RSSFitnessEvaluator()); // 1
+    private static final Parameters TOP_GAUSSIAN_SMALL_SIGMA = new Parameters(1000, 50, new TopOfClassSelector(0.1), new PointwiseGaussianMutator(0.1), new PointwiseBreeder(), new RSSFitnessEvaluator()); // 1
     private static final Parameters TOP_NO_MUTATION = new Parameters(10000, 50, new TopOfClassSelector(0.1), new NullMutator(), new PointwiseBreeder(), new RSSFitnessEvaluator()); // 1
     private static final Parameters DO_NOTHING = new Parameters(10000, 50, new TopOfClassSelector(0.1), new NullMutator(), new NullBreeder(), new RSSFitnessEvaluator());
     private static int NUM_FITNESS_EVALUATIONS = 0;
 
     public static void main(String[] args)
     {
-        List<double[]> chromosomeHistory = geneticAlgorithm(TOP_NO_MUTATION);
+        double[][] chromosomeHistory = geneticAlgorithm(TOP_NO_MUTATION);
         saveToDat(chromosomeHistory);
         System.out.println("total polynomial evaluations: " + NUM_FITNESS_EVALUATIONS);
     }
 
-    private static void saveToDat(List<double[]> arrays)
+    private static void saveToDat(double[][] chromosomeHistory)
     {
         String fileName = "chromosome-history.dat";
 
         try (FileWriter fileWriter = new FileWriter(fileName); BufferedWriter bufferedWriter = new BufferedWriter(fileWriter))
         {
-            for (double[] array : arrays)
+            for (double[] chromosome : chromosomeHistory)
             {
-                for (int i = 0; i < array.length - 1; i++)
+                for (int i = 0; i < chromosome.length - 1; i++)
                 {
-                    bufferedWriter.write(array[i] + ",");
+                    bufferedWriter.write(chromosome[i] + ",");
                 }
 
-                bufferedWriter.write(array[array.length - 1] + "");
+                bufferedWriter.write(chromosome[chromosome.length - 1] + "");
                 bufferedWriter.newLine();
             }
         } catch (IOException e)
@@ -68,24 +65,22 @@ public class Main
         }
     }
 
-    private static List<double[]> geneticAlgorithm(Parameters params)
+    private static double[][] geneticAlgorithm(Parameters params)
     {
-        List<double[]> chromosomeHistory = new ArrayList<>();
-
+        double[][] chromosomeHistory = new double[params.maxNumIterations][6];
         double[][] currentPopulation = generateRandomPopulation(params.populationSize);
         double previousAverageFitness = Double.MAX_VALUE;
 
-        for (int iteration = 0; iteration < params.numIterations; iteration++)
+        for (int iteration = 0; iteration < params.maxNumIterations; iteration++)
         {
             // core algorithm
             double[] fitness = calculateFitness(params, currentPopulation);
             double[][] sortedPopulation = sortPopulationByFitness(params, fitness, currentPopulation);
-            double[][][] selectedParentPairs = params.selector().select(sortedPopulation);
-            assert selectedParentPairs.length == params.populationSize;
+            double[][][] selectedParentPairs = params.selector.select(sortedPopulation);
             double[][] nextGeneration = breedNextGeneration(params, selectedParentPairs);
 
             // bookkeeping
-            chromosomeHistory.add(sortedPopulation[0]);
+            chromosomeHistory[iteration] = sortedPopulation[0];
             double averageFitness = Arrays.stream(fitness).average().orElse(0.0);
             System.out.println(averageFitness);
 
@@ -110,7 +105,7 @@ public class Main
             double[] selectedParent1 = selectedParentPairs[i][0];
             double[] selectedParent2 = selectedParentPairs[i][1];
             double[] childChromosome = params.breeder.breed(selectedParent1, selectedParent2);
-            double[] mutatedChild = params.mutator().mutate(childChromosome);
+            double[] mutatedChild = params.mutator.mutate(childChromosome);
             nextGeneration[i] = mutatedChild;
         }
         return nextGeneration;
@@ -298,7 +293,7 @@ public class Main
         }
     }
 
-    private record Parameters(int populationSize, int numIterations, Selector selector, Mutator mutator,
+    private record Parameters(int populationSize, int maxNumIterations, Selector selector, Mutator mutator,
                               Breeder breeder, FitnessEvaluator fitnessEvaluator)
     {
     }
