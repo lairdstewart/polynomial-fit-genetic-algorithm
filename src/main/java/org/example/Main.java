@@ -8,7 +8,9 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.IntStream;
 
 /**
  * smaller Params.numSelect makes convergence faster and smoother (~1/100). As it gets larger (~1/10) convergence is
@@ -25,27 +27,21 @@ import java.util.List;
  */
 public class Main
 {
-    private static int NUM_FITNESS_EVALUATIONS = 0;
-
     // todo curious to try and see what optimal setup there is when we only have 1000 sample size
     // range -10 to 10
     private static final double[] TRUE_COEFFICIENTS = new double[]{1, -1, -4, -9, 6.5, 9.5};
-
     private static final RandomDataGenerator RANDOM = new RandomDataGenerator();
-    private static final Parameters GEOMETRIC_POINTWISE = new Parameters(10000, 50, new GeometricSelector(0.01,
-            0.1), new PointwiseRandomMutator(), new PointwiseBreeder()); // 80
-    private static final Parameters TOP_GAUSSIAN_MID_SIGMA = new Parameters(10000, 50, new TopOfClassSelector(0.1),
-            new PointwiseGaussianMutator(1), new PointwiseBreeder()); // 8
-    private static final Parameters TOP_GAUSSIAN_SMALL_SIGMA = new Parameters(10000, 50,
-            new TopOfClassSelector(0.1), new PointwiseGaussianMutator(0.1), new PointwiseBreeder()); // 1
-    private static final Parameters TOP_NO_MUTATION = new Parameters(10000, 50, new TopOfClassSelector(0.1),
-            new NullMutator(), new PointwiseBreeder()); // 1
-    private static final Parameters DO_NOTHING = new Parameters(10000, 50, new TopOfClassSelector(0.1),
-            new NullMutator(), new NullBreeder());
+    private static final Parameters GEOMETRIC_POINTWISE = new Parameters(10000, 50, new GeometricSelector(0.01, 0.1), new PointwiseRandomMutator(), new PointwiseBreeder(), new RSSFitnessEvaluator()); // 80
+    private static final Parameters TOP_GAUSSIAN_MID_SIGMA = new Parameters(10000, 50, new TopOfClassSelector(0.1), new PointwiseGaussianMutator(1), new PointwiseBreeder(), new RSSFitnessEvaluator()); // 8
+    private static final Parameters TOP_GAUSSIAN_SMALL_SIGMA = new Parameters(1000, 50, new TopOfClassSelector(0.1),
+            new PointwiseGaussianMutator(0.1), new PointwiseBreeder(), new RSSFitnessEvaluator()); // 1
+    private static final Parameters TOP_NO_MUTATION = new Parameters(10000, 50, new TopOfClassSelector(0.1), new NullMutator(), new PointwiseBreeder(), new RSSFitnessEvaluator()); // 1
+    private static final Parameters DO_NOTHING = new Parameters(10000, 50, new TopOfClassSelector(0.1), new NullMutator(), new NullBreeder(), new RSSFitnessEvaluator());
+    private static int NUM_FITNESS_EVALUATIONS = 0;
 
     public static void main(String[] args)
     {
-        List<double[]> chromosomeHistory = geneticAlgorithm(TOP_GAUSSIAN_SMALL_SIGMA);
+        List<double[]> chromosomeHistory = geneticAlgorithm(TOP_NO_MUTATION);
         saveToDat(chromosomeHistory);
         System.out.println("total polynomial evaluations: " + NUM_FITNESS_EVALUATIONS);
     }
@@ -54,8 +50,7 @@ public class Main
     {
         String fileName = "chromosome-history.dat";
 
-        try (FileWriter fileWriter = new FileWriter(fileName);
-             BufferedWriter bufferedWriter = new BufferedWriter(fileWriter))
+        try (FileWriter fileWriter = new FileWriter(fileName); BufferedWriter bufferedWriter = new BufferedWriter(fileWriter))
         {
             for (double[] array : arrays)
             {
@@ -73,55 +68,72 @@ public class Main
         }
     }
 
-    /**
-     * 1. kill off all parents and only keep children for the next generation
-     * 2. create 80 children and keep 20 parents for the next generation
-     * 3. create 500 children, down-select to 100
-     */
     private static List<double[]> geneticAlgorithm(Parameters params)
     {
         List<double[]> chromosomeHistory = new ArrayList<>();
 
-        Population currentPopulation = Population.generateRandomPopulation(params.populationSize);
+        double[][] currentGeneration = generateRandomPopulation(params.populationSize);
+        double previousAverageFitness = Double.MAX_VALUE;
 
-        for (int i = 0; i < params.numIterations; i++)
+        for (int iteration = 0; iteration < params.numIterations; iteration++)
         {
-            chromosomeHistory.add(currentPopulation.individuals[0].chromosome);
-            System.out.println(currentPopulation.averageFitness());
+            // evaluate fitness for each individual
+            double[] fitness = new double[params.populationSize];
+            for (int i = 0; i < params.populationSize; i++)
+            {
+                fitness[i] = params.fitnessEvaluator.evaluate(currentGeneration[i]);
+            }
 
-            Individual[] selectedIndividuals = params.selector().select(currentPopulation);
-            Individual[] nextGenerationIndividuals = new Individual[params.populationSize];
+            // sort population by fitness
+            Integer[] indicesSortedByFitness = IntStream.range(0, params.populationSize).boxed().toArray(Integer[]::new);
+            Arrays.sort(indicesSortedByFitness, Comparator.comparingDouble(o -> fitness[o]));
+            double[][] sortedPopulation = new double[params.populationSize][6];
+            for (int i = 0; i < currentGeneration.length; i++)
+            {
+                sortedPopulation[i] = currentGeneration[indicesSortedByFitness[i]];
+            }
+
+            // bookkeeping
+            chromosomeHistory.add(sortedPopulation[0]);
+            double averageFitness = Arrays.stream(fitness).average().orElse(0.0);
+            System.out.println(averageFitness);
+
+            // select parents todo: to make this more clear, select() should select parent pairs
+            int[] selectedParents = params.selector().select(sortedPopulation);
+
+            // create one child per parent pair via crossover and mutatation
+            double[][] nextGeneration = new double[params.populationSize][6];
 
             for (int j = 0; j < params.populationSize; j++)
             {
-                int firstIndex = RANDOM.nextInt(0, selectedIndividuals.length - 1);
+                int firstIndex = RANDOM.nextInt(0, selectedParents.length - 1);
                 int secondIndex;
                 do
                 {
-                    secondIndex = RANDOM.nextInt(0, selectedIndividuals.length - 1);
+                    secondIndex = RANDOM.nextInt(0, selectedParents.length - 1);
                 } while (secondIndex == firstIndex);
 
-                Individual selectedIndividual1 = selectedIndividuals[firstIndex];
-                Individual selectedIndividual2 = selectedIndividuals[secondIndex];
+                double[] selectedIndividual1 = sortedPopulation[firstIndex];
+                double[] selectedIndividual2 = sortedPopulation[secondIndex];
+
                 double[] childChromosome = params.breeder.breed(selectedIndividual1, selectedIndividual2);
-                Individual mutatedChild = params.mutator().mutate(childChromosome);
-                nextGenerationIndividuals[j] = mutatedChild;
+                double[] mutatedChild = params.mutator().mutate(childChromosome);
+                nextGeneration[j] = mutatedChild;
             }
 
-            Population nextPopulation = new Population(nextGenerationIndividuals);
-
-            if (currentPopulation.averageFitness() == nextPopulation.averageFitness())
+            if (averageFitness == previousAverageFitness)
             {
                 break;
             }
 
-            currentPopulation = nextPopulation;
+            currentGeneration = nextGeneration;
+            previousAverageFitness = averageFitness;
         }
 
         return chromosomeHistory;
     }
 
-    private static double evaluateFitness(double[] coefficients)
+    static double evaluateFitness(double[] coefficients)
     {
         NUM_FITNESS_EVALUATIONS++;
 
@@ -130,10 +142,10 @@ public class Main
         {
             double trueValue = quinticPolynomial(x, TRUE_COEFFICIENTS);
             double individualsValue = quinticPolynomial(x, coefficients);
-            sum += Math.pow(trueValue - individualsValue, 4); // better than quadraditc
+            sum += Math.pow(trueValue - individualsValue, 2);
         }
 
-        return Math.pow(sum, 0.25);
+        return Math.pow(sum, 0.5);
     }
 
     /**
@@ -144,10 +156,55 @@ public class Main
         return coefs[0] + coefs[1] * x + coefs[2] * Math.pow(x, 2) + coefs[3] * Math.pow(x, 3) + coefs[4] * Math.pow(x, 4) + coefs[5] * Math.pow(x, 5);
     }
 
+    private static double[] generateRandomIndividual()
+    {
+        double a = Math.random() * 20 - 10;
+        double b = Math.random() * 20 - 10;
+        double c = Math.random() * 20 - 10;
+        double d = Math.random() * 20 - 10;
+        double e = Math.random() * 20 - 10;
+        double f = Math.random() * 20 - 10;
+        return new double[]{a, b, c, d, e, f};
+    }
+
+    private static double[][] generateRandomPopulation(int size)
+    {
+        double[][] individuals = new double[size][6];
+        for (int i = 0; i < size; i++)
+        {
+            individuals[i] = generateRandomIndividual();
+        }
+
+        return individuals;
+    }
+
+    interface FitnessEvaluator
+    {
+        double evaluate(double[] genome);
+    }
+
+    interface Breeder
+    {
+        double[] breed(double[] first, double[] second);
+    }
+
+    interface Mutator
+    {
+        double[] mutate(double[] individual);
+    }
+
+    interface Selector
+    {
+        /**
+         * Assumes the population is sorted. Return the index of selected individuals.
+         */
+        int[] select(double[][] population);
+    }
+
     static class SinglePointCrossover implements Breeder
     {
         @Override
-        public double[] breed(Individual first, Individual second)
+        public double[] breed(double[] first, double[] second)
         {
             double[] childCoefficients = new double[6];
 
@@ -157,10 +214,10 @@ public class Main
             {
                 if (i < crossoverIndex)
                 {
-                    childCoefficients[i] = first.chromosome[i];
+                    childCoefficients[i] = first[i];
                 } else
                 {
-                    childCoefficients[i] = second.chromosome[i];
+                    childCoefficients[i] = second[i];
                 }
             }
 
@@ -171,7 +228,7 @@ public class Main
     static class PointwiseBreeder implements Breeder
     {
         @Override
-        public double[] breed(Individual first, Individual second)
+        public double[] breed(double[] first, double[] second)
         {
             double[] childCoefficients = new double[6];
 
@@ -179,10 +236,10 @@ public class Main
             {
                 if (RANDOM.nextUniform(0, 1) > 0.5)
                 {
-                    childCoefficients[i] = first.chromosome[i];
+                    childCoefficients[i] = first[i];
                 } else
                 {
-                    childCoefficients[i] = second.chromosome[i];
+                    childCoefficients[i] = second[i];
                 }
             }
 
@@ -190,70 +247,39 @@ public class Main
         }
     }
 
-    interface Breeder
+    /**
+     * Residual sum of squares
+     */
+    static class RSSFitnessEvaluator implements FitnessEvaluator
     {
-        double[] breed(Individual first, Individual second);
-    }
+        @Override
+        public double evaluate(double[] genome)
+        {
+            NUM_FITNESS_EVALUATIONS++;
 
-    interface Mutator
-    {
-        Individual mutate(double[] individual);
-    }
+            double sum = 0;
+            for (double x = -2; x <= 2; x += (double) 4 / 20)
+            {
+                double trueValue = quinticPolynomial(x, TRUE_COEFFICIENTS);
+                double individualsValue = quinticPolynomial(x, genome);
+                sum += Math.pow(trueValue - individualsValue, 2);
+            }
 
-    interface Selector
-    {
-        Individual[] select(Population population);
+            return sum;
+        }
     }
 
     private record Parameters(int populationSize, int numIterations, Selector selector, Mutator mutator,
-                              Breeder breeder)
+                              Breeder breeder, FitnessEvaluator fitnessEvaluator)
     {
-    }
-
-    record Individual(double[] chromosome, double fitness) implements Comparable<Individual>
-    {
-
-        Individual(double[] chromosome)
-        {
-            this(chromosome, evaluateFitness(chromosome));
-        }
-
-        static Individual generateRandomIndividual()
-        {
-            double a = Math.random() * 20 - 10;
-            double b = Math.random() * 20 - 10;
-            double c = Math.random() * 20 - 10;
-            double d = Math.random() * 20 - 10;
-            double e = Math.random() * 20 - 10;
-            double f = Math.random() * 20 - 10;
-            double[] genome = new double[]{a, b, c, d, e, f};
-
-            return new Individual(genome);
-        }
-
-        @Override
-        public String toString()
-        {
-            return String.format("fitness: %f, chromosome: %s", fitness, Arrays.toString(chromosome));
-        }
-
-        @Override
-        public int compareTo(Individual o)
-        {
-            double compare = fitness - o.fitness;
-            if (compare < 0) return -1;
-            else if (compare > 0) return 1;
-            else return 0;
-        }
     }
 
     static class WeightedSelector implements Selector
     {
-        // todo
         @Override
-        public Individual[] select(Population population)
+        public int[] select(double[][] population)
         {
-            return new Individual[0];
+            return new int[0];
         }
     }
 
@@ -267,11 +293,10 @@ public class Main
         }
 
         @Override
-        public Individual[] select(Population population)
+        public int[] select(double[][] population)
         {
-            int numToSelect = (int) (population.size * pctToSelect);
-
-            return Arrays.copyOfRange(population.individuals, 0, numToSelect);
+            int numToSelect = (int) (population.length * pctToSelect);
+            return IntStream.range(0, numToSelect).toArray();
         }
 
     }
@@ -288,24 +313,22 @@ public class Main
         }
 
         @Override
-        public Individual[] select(Population population)
+        public int[] select(double[][] population)
         {
-            int numToSelect = (int) (population.size * pctToSelect);
+            int numToSelect = (int) (population.length * pctToSelect);
 
-            boolean[] selectedIndices = new boolean[population.size];
-            Individual[] selectedIndividuals = new Individual[numToSelect];
+            boolean[] selectedIndices = new boolean[population.length];
 
             int numSelected = 0;
             while (numSelected < numToSelect)
             {
-                int sampleIndex = sample(population.size);
+                int sampleIndex = sample(population.length);
 
-                while (sampleIndex < population.size)
+                while (sampleIndex < population.length)
                 {
                     if (!selectedIndices[sampleIndex])
                     {
                         selectedIndices[sampleIndex] = true;
-                        selectedIndividuals[numSelected] = population.individuals[sampleIndex];
                         numSelected++;
                         break;
                     }
@@ -315,7 +338,18 @@ public class Main
                 }
             }
 
-            return selectedIndividuals;
+            int[] result = new int[numSelected];
+            int resultSize = 0;
+
+            for (int i = 0; i < selectedIndices.length; i++)
+            {
+                if (selectedIndices[i])
+                {
+                    result[resultSize++] = i;
+                }
+            }
+
+            return result;
         }
 
         int sample(int upperBoundExclusive)
@@ -330,56 +364,12 @@ public class Main
         }
     }
 
-    record Population(Individual[] individuals, int size)
-    {
-        Population(Individual[] individuals)
-        {
-            this(individuals, individuals.length);
-            Arrays.sort(individuals);
-        }
-
-        static Population generateRandomPopulation(int size)
-        {
-            Individual[] individuals = new Individual[size];
-            for (int i = 0; i < size; i++)
-            {
-                individuals[i] = Individual.generateRandomIndividual();
-            }
-
-            return new Population(individuals);
-        }
-
-        @Override
-        public String toString()
-        {
-            StringBuilder builder = new StringBuilder();
-
-            for (Individual individual : individuals)
-            {
-                builder.append(individual.toString());
-                builder.append("\n");
-            }
-
-            return builder.toString();
-        }
-
-        double averageFitness()
-        {
-            double sum = 0;
-            for (Individual individual : individuals)
-            {
-                sum += individual.fitness;
-            }
-            return sum / individuals.length;
-        }
-    }
-
     static class NullMutator implements Mutator
     {
         @Override
-        public Individual mutate(double[] chromosome)
+        public double[] mutate(double[] chromosome)
         {
-            return new Individual(chromosome);
+            return chromosome;
         }
     }
 
@@ -393,43 +383,43 @@ public class Main
         }
 
         @Override
-        public Individual mutate(double[] chromosome)
+        public double[] mutate(double[] chromosome)
         {
             if (RANDOM.nextUniform(0, 1) < 0.5)
             {
                 double[] mutantChromosome = new double[chromosome.length];
                 int randomCoefficientIndex = RANDOM.nextInt(0, 5);
                 mutantChromosome[randomCoefficientIndex] = RANDOM.nextGaussian(chromosome[randomCoefficientIndex], sigma);
-                return new Individual(mutantChromosome);
+                return mutantChromosome;
             }
 
-            return new Individual(chromosome);
+            return chromosome;
         }
     }
 
     static class PointwiseRandomMutator implements Mutator
     {
         @Override
-        public Individual mutate(double[] chromosome)
+        public double[] mutate(double[] chromosome)
         {
             if (RANDOM.nextUniform(0, 1) < 0.5)
             {
                 double[] mutantChromosome = new double[chromosome.length];
                 int randomCoefficientIndex = RANDOM.nextInt(0, 5);
                 mutantChromosome[randomCoefficientIndex] = RANDOM.nextUniform(-10, 10);
-                return new Individual(mutantChromosome);
+                return mutantChromosome;
             }
 
-            return new Individual(chromosome);
+            return chromosome;
         }
     }
 
     static class NullBreeder implements Breeder
     {
         @Override
-        public double[] breed(Individual first, Individual second)
+        public double[] breed(double[] first, double[] second)
         {
-            return first.chromosome;
+            return first;
         }
     }
 }
