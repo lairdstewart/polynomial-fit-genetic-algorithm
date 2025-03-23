@@ -77,47 +77,66 @@ public class Main
 
         for (int iteration = 0; iteration < params.numIterations; iteration++)
         {
+            // core algorithm
             double[] fitness = calculateFitness(params, currentPopulation);
             double[][] sortedPopulation = sortPopulationByFitness(params, fitness, currentPopulation);
+            double[][][] selectedParentPairs = params.selector().select(sortedPopulation);
+            assert selectedParentPairs.length == params.populationSize;
+            double[][] nextGeneration = breedNextGeneration(params, selectedParentPairs);
 
             // bookkeeping
             chromosomeHistory.add(sortedPopulation[0]);
             double averageFitness = Arrays.stream(fitness).average().orElse(0.0);
             System.out.println(averageFitness);
 
-            // select parents todo: to make this more clear, select() should select parent pairs
-            int[] selectedParents = params.selector().select(sortedPopulation);
-
-            // create one child per parent pair via crossover and mutatation
-            double[][] nextGeneration = new double[params.populationSize][6];
-
-            for (int j = 0; j < params.populationSize; j++)
-            {
-                int firstIndex = RANDOM.nextInt(0, selectedParents.length - 1);
-                int secondIndex;
-                do
-                {
-                    secondIndex = RANDOM.nextInt(0, selectedParents.length - 1);
-                } while (secondIndex == firstIndex);
-
-                double[] selectedIndividual1 = sortedPopulation[firstIndex];
-                double[] selectedIndividual2 = sortedPopulation[secondIndex];
-
-                double[] childChromosome = params.breeder.breed(selectedIndividual1, selectedIndividual2);
-                double[] mutatedChild = params.mutator().mutate(childChromosome);
-                nextGeneration[j] = mutatedChild;
-            }
-
+            // update for next gen
             if (averageFitness == previousAverageFitness)
             {
                 break;
             }
-
             currentPopulation = nextGeneration;
             previousAverageFitness = averageFitness;
         }
 
         return chromosomeHistory;
+    }
+
+    private static double[][] breedNextGeneration(Parameters params, double[][][] selectedParentPairs)
+    {
+        double[][] nextGeneration = new double[params.populationSize][6];
+
+        for (int i = 0; i < params.populationSize; i++)
+        {
+            double[] selectedParent1 = selectedParentPairs[i][0];
+            double[] selectedParent2 = selectedParentPairs[i][1];
+            double[] childChromosome = params.breeder.breed(selectedParent1, selectedParent2);
+            double[] mutatedChild = params.mutator().mutate(childChromosome);
+            nextGeneration[i] = mutatedChild;
+        }
+        return nextGeneration;
+    }
+
+    /**
+     * @return double[numPairsToSample][parent index][gene index]
+     */
+    private static double[][][] sampleParentPairsWithoutReplacement(double[][] individuals, int numPairsToSample)
+    {
+        double[][][] result = new double[numPairsToSample][2][6];
+
+        for (int i = 0; i < numPairsToSample; i++)
+        {
+            int firstIndex = RANDOM.nextInt(0, individuals.length - 1);
+            int secondIndex;
+            do
+            {
+                secondIndex = RANDOM.nextInt(0, individuals.length - 1);
+            } while (secondIndex == firstIndex);
+
+            result[i][0] = individuals[firstIndex];
+            result[i][1] = individuals[secondIndex];
+        }
+
+        return result;
     }
 
     private static double[][] sortPopulationByFitness(Parameters params, double[] fitness, double[][] currentGeneration)
@@ -205,9 +224,10 @@ public class Main
     interface Selector
     {
         /**
-         * Assumes the population is sorted. Return the index of selected individuals.
+         * Assumes the population is sorted by fitness. Return pairs of parents to be bred.
+         * return: double[population.length][num parents (2)][num genes (6)]
          */
-        int[] select(double[][] population);
+        double[][][] select(double[][] population);
     }
 
     static class SinglePointCrossover implements Breeder
@@ -283,15 +303,6 @@ public class Main
     {
     }
 
-    static class WeightedSelector implements Selector
-    {
-        @Override
-        public int[] select(double[][] population)
-        {
-            return new int[0];
-        }
-    }
-
     static class TopOfClassSelector implements Selector
     {
         final double pctToSelect;
@@ -302,10 +313,13 @@ public class Main
         }
 
         @Override
-        public int[] select(double[][] population)
+        public double[][][] select(double[][] population)
         {
-            int numToSelect = (int) (population.length * pctToSelect);
-            return IntStream.range(0, numToSelect).toArray();
+            int numParents = (int) (population.length * pctToSelect);
+            double[][] parents = new double[numParents][6];
+            System.arraycopy(population, 0, parents, 0, numParents);
+
+            return sampleParentPairsWithoutReplacement(parents, population.length);
         }
 
     }
@@ -322,43 +336,46 @@ public class Main
         }
 
         @Override
-        public int[] select(double[][] population)
+        public double[][][] select(double[][] population)
         {
-            int numToSelect = (int) (population.length * pctToSelect);
+            return null;
 
-            boolean[] selectedIndices = new boolean[population.length];
-
-            int numSelected = 0;
-            while (numSelected < numToSelect)
-            {
-                int sampleIndex = sample(population.length);
-
-                while (sampleIndex < population.length)
-                {
-                    if (!selectedIndices[sampleIndex])
-                    {
-                        selectedIndices[sampleIndex] = true;
-                        numSelected++;
-                        break;
-                    }
-
-                    // if already selected, select the next individual and so on
-                    sampleIndex++;
-                }
-            }
-
-            int[] result = new int[numSelected];
-            int resultSize = 0;
-
-            for (int i = 0; i < selectedIndices.length; i++)
-            {
-                if (selectedIndices[i])
-                {
-                    result[resultSize++] = i;
-                }
-            }
-
-            return result;
+            // todo
+//            int numToSelect = (int) (population.length * pctToSelect);
+//
+//            boolean[] selectedIndices = new boolean[population.length];
+//
+//            int numSelected = 0;
+//            while (numSelected < numToSelect)
+//            {
+//                int sampleIndex = sample(population.length);
+//
+//                while (sampleIndex < population.length)
+//                {
+//                    if (!selectedIndices[sampleIndex])
+//                    {
+//                        selectedIndices[sampleIndex] = true;
+//                        numSelected++;
+//                        break;
+//                    }
+//
+//                    // if already selected, select the next individual and so on
+//                    sampleIndex++;
+//                }
+//            }
+//
+//            int[] result = new int[numSelected];
+//            int resultSize = 0;
+//
+//            for (int i = 0; i < selectedIndices.length; i++)
+//            {
+//                if (selectedIndices[i])
+//                {
+//                    result[resultSize++] = i;
+//                }
+//            }
+//
+//            return result;
         }
 
         int sample(int upperBoundExclusive)
