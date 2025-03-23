@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from numpy import size
 
 def read_data(filename):
     data = []
@@ -37,5 +38,5 @@ def animate(i):
     ax.set_title(f'Generation {i+1}')
     return line, points, ax.title
 
-ani = animation.FuncAnimation(fig, animate, frames=len(data), interval=200, blit=False)
+ani = animation.FuncAnimation(fig, animate, frames=len(data), interval=50000/size(data), blit=False)
 plt.show()
