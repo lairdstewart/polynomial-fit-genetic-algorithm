@@ -72,26 +72,13 @@ public class Main
     {
         List<double[]> chromosomeHistory = new ArrayList<>();
 
-        double[][] currentGeneration = generateRandomPopulation(params.populationSize);
+        double[][] currentPopulation = generateRandomPopulation(params.populationSize);
         double previousAverageFitness = Double.MAX_VALUE;
 
         for (int iteration = 0; iteration < params.numIterations; iteration++)
         {
-            // evaluate fitness for each individual
-            double[] fitness = new double[params.populationSize];
-            for (int i = 0; i < params.populationSize; i++)
-            {
-                fitness[i] = params.fitnessEvaluator.evaluate(currentGeneration[i]);
-            }
-
-            // sort population by fitness
-            Integer[] indicesSortedByFitness = IntStream.range(0, params.populationSize).boxed().toArray(Integer[]::new);
-            Arrays.sort(indicesSortedByFitness, Comparator.comparingDouble(o -> fitness[o]));
-            double[][] sortedPopulation = new double[params.populationSize][6];
-            for (int i = 0; i < currentGeneration.length; i++)
-            {
-                sortedPopulation[i] = currentGeneration[indicesSortedByFitness[i]];
-            }
+            double[] fitness = calculateFitness(params, currentPopulation);
+            double[][] sortedPopulation = sortPopulationByFitness(params, fitness, currentPopulation);
 
             // bookkeeping
             chromosomeHistory.add(sortedPopulation[0]);
@@ -126,11 +113,33 @@ public class Main
                 break;
             }
 
-            currentGeneration = nextGeneration;
+            currentPopulation = nextGeneration;
             previousAverageFitness = averageFitness;
         }
 
         return chromosomeHistory;
+    }
+
+    private static double[][] sortPopulationByFitness(Parameters params, double[] fitness, double[][] currentGeneration)
+    {
+        Integer[] indicesSortedByFitness = IntStream.range(0, params.populationSize).boxed().toArray(Integer[]::new);
+        Arrays.sort(indicesSortedByFitness, Comparator.comparingDouble(o -> fitness[o]));
+        double[][] sortedPopulation = new double[params.populationSize][6];
+        for (int i = 0; i < currentGeneration.length; i++)
+        {
+            sortedPopulation[i] = currentGeneration[indicesSortedByFitness[i]];
+        }
+        return sortedPopulation;
+    }
+
+    private static double[] calculateFitness(Parameters params, double[][] currentGeneration)
+    {
+        double[] fitness = new double[params.populationSize];
+        for (int i = 0; i < params.populationSize; i++)
+        {
+            fitness[i] = params.fitnessEvaluator.evaluate(currentGeneration[i]);
+        }
+        return fitness;
     }
 
     static double evaluateFitness(double[] coefficients)

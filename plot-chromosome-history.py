@@ -37,5 +37,5 @@ def animate(i):
     ax.set_title(f'Generation {i+1}')
     return line, points, ax.title
 
-ani = animation.FuncAnimation(fig, animate, frames=len(data), interval=500, blit=False)
+ani = animation.FuncAnimation(fig, animate, frames=len(data), interval=200, blit=False)
 plt.show()
